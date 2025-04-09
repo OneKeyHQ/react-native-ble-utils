@@ -32,7 +32,7 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
   private fun getBluetoothManager(): BluetoothManager? {
     if (bluetoothManager == null) {
       bluetoothManager =
-        reactContext.getSystemService(Context.BLUETOOTH_SERVICE)
+        reactContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
     }
     return bluetoothManager
   }
