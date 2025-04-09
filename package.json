@@ -1,15 +1,15 @@
 {
   "name": "@onekeyfe/react-native-ble-utils",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ble uilts",
   "source": "./src/index.tsx",
-  "main": "./lib/commonjs/index.js",
-  "module": "./lib/module/index.js",
+  "main": "./dist/commonjs/index.js",
+  "module": "./dist/module/index.js",
   "react-native": "src/index.ts",
-  "types": "./lib/typescript/module/src/index.d.ts",
+  "types": "./dist/typescript/module/src/index.d.ts",
   "files": [
     "src",
-    "lib",
+    "dist",
     "android",
     "ios",
     "cpp",
@@ -31,7 +31,7 @@
     "test": "jest",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
+    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build dist",
     "prepare": "bob build",
     "release": "release-it"
   },
@@ -90,7 +90,7 @@
     "preset": "react-native",
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
-      "<rootDir>/lib/"
+      "<rootDir>/dist/"
     ]
   },
   "commitlint": {
@@ -137,7 +137,7 @@
   },
   "eslintIgnore": [
     "node_modules/",
-    "lib/"
+    "dist/"
   ],
   "prettier": {
     "quoteProps": "consistent",
@@ -148,7 +148,7 @@
   },
   "react-native-builder-bob": {
     "source": "src",
-    "output": "lib",
+    "output": "dist",
     "targets": [
       [
         "commonjs",
