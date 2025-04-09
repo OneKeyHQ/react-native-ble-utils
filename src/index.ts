@@ -2,6 +2,10 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import type { BleState, Peripheral, BondState, AdvertisingData } from './type';
 
 const { BleUtilsModule } = NativeModules;
+type PairDeviceResult = {
+  bonded: boolean;
+  bonding: boolean;
+};
 
 class BleUtils {
   UiEventEmitter: NativeEventEmitter | null = null;
@@ -16,6 +20,38 @@ class BleUtils {
       BleUtilsModule.checkState((state: BleState) => {
         fulfill(state);
       });
+    });
+  }
+
+  /**
+   * [Android only]
+   * @param macAddress
+   * @returns
+   */
+  pairDevice(macAddress: string): Promise<PairDeviceResult> {
+    if (Platform.OS !== 'android')
+      return Promise.resolve({
+        bonded: true,
+        bonding: false,
+      });
+    return new Promise<PairDeviceResult>((fulfill, reject) => {
+      BleUtilsModule.pairDevice(
+        macAddress,
+        (error: string | null, result: PairDeviceResult | null) => {
+          if (error) {
+            reject(error);
+          } else {
+            if (result) {
+              fulfill(result);
+            } else {
+              fulfill({
+                bonded: false,
+                bonding: false,
+              });
+            }
+          }
+        }
+      );
     });
   }
 

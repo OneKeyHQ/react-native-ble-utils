@@ -126,6 +126,49 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
   @SuppressLint("MissingPermission")
   @ReactMethod
+  fun pairDevice(macAddress: String, callback: Callback) {
+    val adapter = getBluetoothAdapter()
+    if (adapter == null) {
+      callback.invoke("Bluetooth not supported", null)
+      return
+    }
+
+    try {
+      val device = adapter.getRemoteDevice(macAddress)
+
+      var bonded = false
+      var bonding = false
+
+      when (device.bondState) {
+        BluetoothDevice.BOND_BONDED -> {
+          bonded = true
+          bonding = false
+        }
+
+        BluetoothDevice.BOND_BONDING -> {
+          bonded = false
+          bonding = true
+        }
+
+        BluetoothDevice.BOND_NONE -> {
+          val started = device.createBond()
+          bonded = false
+          bonding = started
+        }
+      }
+
+      val map: WritableMap = Arguments.createMap()
+      map.putBoolean("bonded", bonded)
+      map.putBoolean("bonding", bonding)
+      callback.invoke(null, map)
+    } catch (e: Exception) {
+      Log.e(LOG_TAG, "pairDevice error: ${e.message}")
+      callback.invoke(e.message, null)
+    }
+  }
+
+  @SuppressLint("MissingPermission")
+  @ReactMethod
   fun getBondedPeripherals(callback: Callback) {
     val map: WritableArray = Arguments.createArray()
     val deviceSet: Set<BluetoothDevice> = getBluetoothAdapter()?.getBondedDevices() ?: emptySet()
