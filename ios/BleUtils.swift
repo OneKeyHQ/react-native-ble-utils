@@ -5,6 +5,7 @@ import CoreBluetooth
 class BleUtilsModule: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var manager: CBCentralManager?
     private let serialQueue = DispatchQueue(label: "BleUtilsModule.serialQueue")
+    private var stateChangedCallbacks: [RCTResponseSenderBlock] = []
 
   @objc
     static func requiresMainQueueSetup() -> Bool {
@@ -17,13 +18,23 @@ class BleUtilsModule: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-
+        if !stateChangedCallbacks.isEmpty {
+            let stateName = Helper.centralManagerStateToString(central.state)
+            for callback in stateChangedCallbacks {
+                callback([stateName])
+            }
+            stateChangedCallbacks.removeAll()
+        }
     }
 
     @objc public func checkState(_ callback: @escaping RCTResponseSenderBlock) {
         if let manager = manager {
-            let stateName = Helper.centralManagerStateToString(manager.state)
-            callback([stateName])
+            if manager.state == .unknown {
+                stateChangedCallbacks.append(callback)
+            } else {
+                let stateName = Helper.centralManagerStateToString(manager.state)
+                callback([stateName])
+            }
         }
     }
 

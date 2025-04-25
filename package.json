@@ -1,6 +1,6 @@
 {
   "name": "@onekeyfe/react-native-ble-utils",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "ble uilts",
   "source": "./src/index.tsx",
   "main": "./dist/commonjs/index.js",
