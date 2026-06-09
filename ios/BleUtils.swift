@@ -14,7 +14,14 @@ class BleUtilsModule: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     override init() {
       super.init()
-      manager = CBCentralManager(delegate: self, queue: nil)
+      // Lazy CBCentralManager: avoid triggering iOS BT dialog on module init.
+    }
+
+    private func ensureManager() -> CBCentralManager {
+      if let m = manager { return m }
+      let m = CBCentralManager(delegate: self, queue: nil)
+      manager = m
+      return m
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -28,13 +35,12 @@ class BleUtilsModule: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     @objc public func checkState(_ callback: @escaping RCTResponseSenderBlock) {
-        if let manager = manager {
-            if manager.state == .unknown {
-                stateChangedCallbacks.append(callback)
-            } else {
-                let stateName = Helper.centralManagerStateToString(manager.state)
-                callback([stateName])
-            }
+        let manager = ensureManager()
+        if manager.state == .unknown {
+            stateChangedCallbacks.append(callback)
+        } else {
+            let stateName = Helper.centralManagerStateToString(manager.state)
+            callback([stateName])
         }
     }
 
@@ -49,7 +55,7 @@ class BleUtilsModule: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
         var connectedPeripherals: [Peripheral] = []
 
-        let connectedCBPeripherals: [CBPeripheral] = manager?.retrieveConnectedPeripherals(withServices: serviceUUIDs) ?? []
+        let connectedCBPeripherals: [CBPeripheral] = ensureManager().retrieveConnectedPeripherals(withServices: serviceUUIDs)
 
         serialQueue.sync {
             for ph in connectedCBPeripherals {
