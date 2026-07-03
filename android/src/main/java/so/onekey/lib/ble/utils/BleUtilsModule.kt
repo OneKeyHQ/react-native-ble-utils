@@ -192,14 +192,42 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
+    // Normalize the requested service UUIDs (empty -> no filter, keep all).
+    val wantedServiceUuids = HashSet<String>()
+    if (serviceUUIDs != null) {
+      for (i in 0 until serviceUUIDs.size()) {
+        serviceUUIDs.getString(i)?.let { wantedServiceUuids.add(it.lowercase()) }
+      }
+    }
+
     val peripherals: List<BluetoothDevice> =
       getBluetoothManager()?.getConnectedDevices(GATT) ?: emptyList()
     for (entry in peripherals) {
+      // getConnectedDevices(GATT) returns EVERY system GATT-connected device,
+      // including ones connected by other apps (e.g. a Ledger via its own SDK).
+      // Match against the device's cached (bonded) service UUIDs so callers only
+      // get devices actually exposing the requested service — mirrors iOS
+      // retrieveConnectedPeripherals(withServices:). Previously serviceUUIDs was
+      // ignored, so unrelated hardware leaked into the results.
+      if (wantedServiceUuids.isNotEmpty() && !deviceExposesService(entry, wantedServiceUuids)) {
+        continue
+      }
       val peripheral = Peripheral(entry)
       val jsonBundle: WritableMap = peripheral.asWritableMap()
       map.pushMap(jsonBundle)
     }
     callback.invoke(null, map)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun deviceExposesService(
+    device: BluetoothDevice,
+    wantedServiceUuids: Set<String>
+  ): Boolean {
+    // null/empty = unknown, not absent -> keep it
+    val uuids = device.uuids
+    if (uuids.isNullOrEmpty()) return true
+    return uuids.any { wantedServiceUuids.contains(it.uuid.toString().lowercase()) }
   }
 
   private class MyBroadcastReceiver(private val module: BleUtilsModule) : BroadcastReceiver() {
