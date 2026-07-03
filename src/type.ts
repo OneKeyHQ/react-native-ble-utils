@@ -33,6 +33,7 @@ export interface Peripheral {
   name?: string;
   advertising: AdvertisingData;
   bondState: BondState;
+  serviceUUIDs?: string[];
 }
 
 export interface BondState {

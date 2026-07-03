@@ -26,6 +26,10 @@ class Peripheral(
       advertising.putBoolean("isConnectable", true)
 
       map.putMap("advertising", advertising)
+
+      val serviceUUIDs = Arguments.createArray()
+      device.uuids?.forEach { serviceUUIDs.pushString(it.uuid.toString()) }
+      map.putArray("serviceUUIDs", serviceUUIDs)
     } catch (e: Exception) { // this shouldn't happen
       Log.e("BleUtils", "Unexpected error on asWritableMap", e)
     }

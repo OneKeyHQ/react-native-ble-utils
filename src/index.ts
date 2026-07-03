@@ -57,7 +57,7 @@ class BleUtils {
 
   /**
    *
-   * @param serviceUUIDs [optional] not used on android, optional on ios.
+   * @param serviceUUIDs [optional] filter by service UUID (android + ios); empty = no filter.
    * @returns
    */
   getConnectedPeripherals(serviceUUIDs: string[] = []) {
