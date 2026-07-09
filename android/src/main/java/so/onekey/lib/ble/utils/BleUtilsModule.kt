@@ -192,14 +192,34 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
+    val wantedServiceUuids = HashSet<String>()
+    if (serviceUUIDs != null) {
+      for (i in 0 until serviceUUIDs.size()) {
+        serviceUUIDs.getString(i)?.let { wantedServiceUuids.add(it.lowercase()) }
+      }
+    }
+
     val peripherals: List<BluetoothDevice> =
       getBluetoothManager()?.getConnectedDevices(GATT) ?: emptyList()
     for (entry in peripherals) {
+      if (wantedServiceUuids.isNotEmpty() && !deviceExposesService(entry, wantedServiceUuids)) {
+        continue
+      }
       val peripheral = Peripheral(entry)
       val jsonBundle: WritableMap = peripheral.asWritableMap()
       map.pushMap(jsonBundle)
     }
     callback.invoke(null, map)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun deviceExposesService(
+    device: BluetoothDevice,
+    wantedServiceUuids: Set<String>
+  ): Boolean {
+    val uuids = device.uuids
+    if (uuids.isNullOrEmpty()) return true
+    return uuids.any { wantedServiceUuids.contains(it.uuid.toString().lowercase()) }
   }
 
   private class MyBroadcastReceiver(private val module: BleUtilsModule) : BroadcastReceiver() {
