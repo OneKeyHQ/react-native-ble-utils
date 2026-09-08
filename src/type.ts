@@ -39,6 +39,8 @@ export interface Peripheral {
 export interface BondState {
   state: string;
   preState: string;
+  /** Android EXTRA_UNBOND_REASON, when supplied by the system. */
+  reason?: number;
 }
 
 export interface AdvertisingData {

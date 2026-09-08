@@ -262,6 +262,11 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
         val bond = Arguments.createMap()
         bond.putString("state", bondStateStr)
         bond.putString("preState", prevBondStateStr)
+        // EXTRA_UNBOND_REASON is not exposed by the public Android SDK.
+        val reasonExtra = "android.bluetooth.device.extra.REASON"
+        if (bondState == BluetoothDevice.BOND_NONE && intent.hasExtra(reasonExtra)) {
+          bond.putInt("reason", intent.getIntExtra(reasonExtra, BluetoothDevice.ERROR))
+        }
 
         val peripheral = Peripheral(device!!)
         val map = peripheral.asWritableMap()
