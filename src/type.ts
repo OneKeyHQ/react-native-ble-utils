@@ -43,6 +43,11 @@ export interface BondState {
   reason?: number;
 }
 
+export interface KeyMissingPeripheral {
+  /** Device MAC address. */
+  id: string;
+}
+
 export interface AdvertisingData {
   isConnectable?: boolean;
   localName?: string;

@@ -29,6 +29,10 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
   override fun getName() = NAME
 
+  // Lets JS skip waiting for an event this OS version never broadcasts.
+  override fun getConstants(): MutableMap<String, Any> =
+    hashMapOf("supportsKeyMissingEvent" to supportsKeyMissingEvent())
+
   private fun getBluetoothManager(): BluetoothManager? {
     if (bluetoothManager == null) {
       bluetoothManager =
@@ -53,6 +57,9 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
     val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
     filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+    if (supportsKeyMissingEvent()) {
+      filter.addAction(ACTION_KEY_MISSING)
+    }
     val intentFilter = IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST)
     intentFilter.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
     if (Build.VERSION.SDK_INT >= 34) {
@@ -76,6 +83,12 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
     reactContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit("onDeviceBondState", params)
+  }
+
+  fun emitOnDeviceKeyMissing(params: WritableMap) {
+    reactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit("onDeviceKeyMissing", params)
   }
 
   // 事件监听管理
@@ -138,6 +151,9 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
       var bonded = false
       var bonding = false
+      // False while bonding means the system (or another app) started it, e.g. the
+      // re-pairing Android runs by itself after it detects a lost bond.
+      var initiated = false
 
       when (device.bondState) {
         BluetoothDevice.BOND_BONDED -> {
@@ -154,12 +170,14 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
           val started = device.createBond()
           bonded = false
           bonding = started
+          initiated = started
         }
       }
 
       val map: WritableMap = Arguments.createMap()
       map.putBoolean("bonded", bonded)
       map.putBoolean("bonding", bonding)
+      map.putBoolean("initiated", initiated)
       callback.invoke(null, map)
     } catch (e: Exception) {
       Log.e(LOG_TAG, "pairDevice error: ${e.message}")
@@ -273,6 +291,20 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
         map.putMap("bondState", bond)
         Log.d(LOG_TAG, "onReceive BluetoothDevice BondState Change ${map}")
         module.emitOnDeviceBondState(map)
+      } else if (action == ACTION_KEY_MISSING) {
+        val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          intent.getParcelableExtra(
+            BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java
+          )
+        } else {
+          intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+        }
+        if (device == null) return
+
+        val map = Arguments.createMap()
+        map.putString("id", device.address)
+        Log.d(LOG_TAG, "onReceive BluetoothDevice KeyMissing")
+        module.emitOnDeviceKeyMissing(map)
       }
     }
   }
@@ -280,5 +312,12 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
   companion object {
     const val NAME = "BleUtilsModule"
     const val LOG_TAG: String = "RNBleUtils"
+
+    // BluetoothDevice.ACTION_KEY_MISSING is public from API 36. The literal keeps this
+    // module building against older compileSdk versions.
+    const val ACTION_KEY_MISSING = "android.bluetooth.device.action.KEY_MISSING"
+    private const val KEY_MISSING_MIN_SDK = 36
+
+    fun supportsKeyMissingEvent(): Boolean = Build.VERSION.SDK_INT >= KEY_MISSING_MIN_SDK
   }
 }
