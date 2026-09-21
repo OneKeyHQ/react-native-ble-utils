@@ -29,6 +29,13 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
   override fun getName() = NAME
 
+  // Lets JS skip waiting for events this OS version never broadcasts.
+  override fun getConstants(): MutableMap<String, Any> =
+    hashMapOf(
+      "supportsKeyMissingEvent" to supportsKeyMissingEvent(),
+      "supportsEncryptionChangeEvent" to supportsEncryptionChangeEvent()
+    )
+
   private fun getBluetoothManager(): BluetoothManager? {
     if (bluetoothManager == null) {
       bluetoothManager =
@@ -53,6 +60,14 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
     val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
     filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+    if (supportsKeyMissingEvent()) {
+      filter.addAction(ACTION_KEY_MISSING)
+    }
+    if (supportsEncryptionChangeEvent()) {
+      filter.addAction(ACTION_ENCRYPTION_CHANGE)
+      // Tells JS when an earlier encryption result stops describing the current link.
+      filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+    }
     val intentFilter = IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST)
     intentFilter.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
     if (Build.VERSION.SDK_INT >= 34) {
@@ -76,6 +91,24 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
     reactContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit("onDeviceBondState", params)
+  }
+
+  fun emitOnDeviceKeyMissing(params: WritableMap) {
+    reactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit("onDeviceKeyMissing", params)
+  }
+
+  fun emitOnDeviceEncryptionChange(params: WritableMap) {
+    reactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit("onDeviceEncryptionChange", params)
+  }
+
+  fun emitOnDeviceAclDisconnected(params: WritableMap) {
+    reactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit("onDeviceAclDisconnected", params)
   }
 
   // 事件监听管理
@@ -138,6 +171,9 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
 
       var bonded = false
       var bonding = false
+      // False while bonding means the system (or another app) started it, e.g. the
+      // re-pairing Android runs by itself after it detects a lost bond.
+      var initiated = false
 
       when (device.bondState) {
         BluetoothDevice.BOND_BONDED -> {
@@ -154,12 +190,14 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
           val started = device.createBond()
           bonded = false
           bonding = started
+          initiated = started
         }
       }
 
       val map: WritableMap = Arguments.createMap()
       map.putBoolean("bonded", bonded)
       map.putBoolean("bonding", bonding)
+      map.putBoolean("initiated", initiated)
       callback.invoke(null, map)
     } catch (e: Exception) {
       Log.e(LOG_TAG, "pairDevice error: ${e.message}")
@@ -262,18 +300,78 @@ class BleUtilsModule(private val reactContext: ReactApplicationContext) :
         val bond = Arguments.createMap()
         bond.putString("state", bondStateStr)
         bond.putString("preState", prevBondStateStr)
+        // EXTRA_UNBOND_REASON is not exposed by the public Android SDK.
+        val reasonExtra = "android.bluetooth.device.extra.REASON"
+        if (bondState == BluetoothDevice.BOND_NONE && intent.hasExtra(reasonExtra)) {
+          bond.putInt("reason", intent.getIntExtra(reasonExtra, BluetoothDevice.ERROR))
+        }
 
         val peripheral = Peripheral(device!!)
         val map = peripheral.asWritableMap()
         map.putMap("bondState", bond)
         Log.d(LOG_TAG, "onReceive BluetoothDevice BondState Change ${map}")
         module.emitOnDeviceBondState(map)
+      } else if (action == ACTION_KEY_MISSING) {
+        val device = deviceExtra(intent) ?: return
+
+        val map = Arguments.createMap()
+        map.putString("id", device.address)
+        Log.d(LOG_TAG, "onReceive BluetoothDevice KeyMissing")
+        module.emitOnDeviceKeyMissing(map)
+      } else if (action == ACTION_ENCRYPTION_CHANGE) {
+        val device = deviceExtra(intent) ?: return
+        if (!isLeTransport(intent)) return
+
+        val map = Arguments.createMap()
+        map.putString("id", device.address)
+        // HCI status: 0 on success, 6 (PIN or key missing) when the peer lost the bond.
+        map.putInt("status", intent.getIntExtra(EXTRA_ENCRYPTION_STATUS, BluetoothDevice.ERROR))
+        map.putBoolean("enabled", intent.getBooleanExtra(EXTRA_ENCRYPTION_ENABLED, false))
+        Log.d(LOG_TAG, "onReceive BluetoothDevice EncryptionChange ${map}")
+        module.emitOnDeviceEncryptionChange(map)
+      } else if (action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
+        val device = deviceExtra(intent) ?: return
+        if (!isLeTransport(intent)) return
+
+        val map = Arguments.createMap()
+        map.putString("id", device.address)
+        Log.d(LOG_TAG, "onReceive BluetoothDevice AclDisconnected")
+        module.emitOnDeviceAclDisconnected(map)
       }
+    }
+
+    private fun deviceExtra(intent: Intent): BluetoothDevice? =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+      } else {
+        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+      }
+
+    // A dual-mode peer reports BR/EDR events too; only the LE link carries GATT.
+    private fun isLeTransport(intent: Intent): Boolean {
+      if (!intent.hasExtra(EXTRA_TRANSPORT)) return true
+      return intent.getIntExtra(EXTRA_TRANSPORT, TRANSPORT_LE) == TRANSPORT_LE
     }
   }
 
   companion object {
     const val NAME = "BleUtilsModule"
     const val LOG_TAG: String = "RNBleUtils"
+
+    // These BluetoothDevice constants are public from API 36. The literals keep this
+    // module building against older compileSdk versions.
+    const val ACTION_KEY_MISSING = "android.bluetooth.device.action.KEY_MISSING"
+    const val ACTION_ENCRYPTION_CHANGE = "android.bluetooth.device.action.ENCRYPTION_CHANGE"
+    private const val EXTRA_ENCRYPTION_STATUS = "android.bluetooth.device.extra.ENCRYPTION_STATUS"
+    private const val EXTRA_ENCRYPTION_ENABLED = "android.bluetooth.device.extra.ENCRYPTION_ENABLED"
+    // BluetoothDevice.EXTRA_TRANSPORT and TRANSPORT_LE, public from API 33 and 23.
+    private const val EXTRA_TRANSPORT = "android.bluetooth.device.extra.TRANSPORT"
+    private const val TRANSPORT_LE = 2
+    private const val LINK_SECURITY_EVENTS_MIN_SDK = 36
+
+    fun supportsKeyMissingEvent(): Boolean = Build.VERSION.SDK_INT >= LINK_SECURITY_EVENTS_MIN_SDK
+
+    fun supportsEncryptionChangeEvent(): Boolean =
+      Build.VERSION.SDK_INT >= LINK_SECURITY_EVENTS_MIN_SDK
   }
 }

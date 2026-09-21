@@ -39,6 +39,27 @@ export interface Peripheral {
 export interface BondState {
   state: string;
   preState: string;
+  /** Android EXTRA_UNBOND_REASON, when supplied by the system. */
+  reason?: number;
+}
+
+export interface KeyMissingPeripheral {
+  /** Device MAC address. */
+  id: string;
+}
+
+export interface EncryptionChangePeripheral {
+  /** Device MAC address. */
+  id: string;
+  /** HCI status of the encryption procedure: 0 on success, 6 when the peer lost the bond. */
+  status: number;
+  /** Whether the LE link is encrypted after the change. */
+  enabled: boolean;
+}
+
+export interface AclDisconnectedPeripheral {
+  /** Device MAC address. */
+  id: string;
 }
 
 export interface AdvertisingData {
