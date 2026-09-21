@@ -48,6 +48,20 @@ export interface KeyMissingPeripheral {
   id: string;
 }
 
+export interface EncryptionChangePeripheral {
+  /** Device MAC address. */
+  id: string;
+  /** HCI status of the encryption procedure: 0 on success, 6 when the peer lost the bond. */
+  status: number;
+  /** Whether the LE link is encrypted after the change. */
+  enabled: boolean;
+}
+
+export interface AclDisconnectedPeripheral {
+  /** Device MAC address. */
+  id: string;
+}
+
 export interface AdvertisingData {
   isConnectable?: boolean;
   localName?: string;

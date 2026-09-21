@@ -5,6 +5,8 @@ import type {
   BondState,
   AdvertisingData,
   KeyMissingPeripheral,
+  EncryptionChangePeripheral,
+  AclDisconnectedPeripheral,
 } from './type';
 
 const { BleUtilsModule } = NativeModules;
@@ -19,7 +21,11 @@ type PairDeviceResult = {
   initiated?: boolean;
 };
 
-const readSupportsKeyMissingEvent = (): boolean => {
+type NativeConstantName =
+  | 'supportsKeyMissingEvent'
+  | 'supportsEncryptionChangeEvent';
+
+const readNativeFlag = (name: NativeConstantName): boolean => {
   if (Platform.OS !== 'android' || !BleUtilsModule) return false;
   // Interop exposes legacy constants through getConstants(); the bridge exposes them
   // as plain properties.
@@ -27,7 +33,7 @@ const readSupportsKeyMissingEvent = (): boolean => {
     typeof BleUtilsModule.getConstants === 'function'
       ? BleUtilsModule.getConstants()
       : BleUtilsModule;
-  return constants?.supportsKeyMissingEvent === true;
+  return constants?.[name] === true;
 };
 
 class BleUtils {
@@ -145,7 +151,7 @@ class BleUtils {
    * the event never fires, so callers should not wait for it.
    */
   supportsDeviceKeyMissing() {
-    return readSupportsKeyMissingEvent();
+    return readNativeFlag('supportsKeyMissingEvent');
   }
 
   /**
@@ -165,6 +171,54 @@ class BleUtils {
       subscription?.remove();
     };
   }
+
+  /**
+   * [Android only]
+   * Whether this OS version and native build report `onDeviceEncryptionChange` and
+   * `onDeviceAclDisconnected`. When false those events never fire.
+   */
+  supportsDeviceEncryptionChange() {
+    return readNativeFlag('supportsEncryptionChangeEvent');
+  }
+
+  /**
+   * [Android 16+ only]
+   * The LE link to a device finished an encryption attempt. Android starts it on its own
+   * right after connecting to a bonded device, so this reports whether the stored bond
+   * still works before any request that needs encryption is sent.
+   * Each subscription is removed on its own, so several callers can listen at once.
+   * @param callback
+   */
+  onDeviceEncryptionChange(
+    callback: (peripheral: EncryptionChangePeripheral) => void
+  ) {
+    const subscription = this.UiEventEmitter?.addListener(
+      'onDeviceEncryptionChange',
+      callback
+    );
+    return () => {
+      subscription?.remove();
+    };
+  }
+
+  /**
+   * [Android 16+ only]
+   * The LE link to a device is gone, so earlier encryption results no longer apply.
+   * Unlike a GATT disconnect, this does not fire while the system keeps the link alive
+   * for another client.
+   * @param callback
+   */
+  onDeviceAclDisconnected(
+    callback: (peripheral: AclDisconnectedPeripheral) => void
+  ) {
+    const subscription = this.UiEventEmitter?.addListener(
+      'onDeviceAclDisconnected',
+      callback
+    );
+    return () => {
+      subscription?.remove();
+    };
+  }
 }
 
 export default new BleUtils();
@@ -174,5 +228,7 @@ export type {
   BondState,
   AdvertisingData,
   KeyMissingPeripheral,
+  EncryptionChangePeripheral,
+  AclDisconnectedPeripheral,
   PairDeviceResult,
 };
